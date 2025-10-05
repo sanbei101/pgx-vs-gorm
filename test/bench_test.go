@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -74,6 +75,30 @@ func BenchmarkPgxInsert(b *testing.B) {
 		_, err := dbPgx.Exec(context.Background(), "INSERT INTO users (name, email, created_at) VALUES ($1, $2, NOW())", name, email)
 		if err != nil {
 			b.Fatalf("pgx insert failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkPgxInsertCopy(b *testing.B) {
+	const totalRows = 10000
+
+	for b.Loop() {
+		rows := make([][]any, 0, totalRows)
+		for j := range totalRows {
+			rows = append(rows, []any{
+				fmt.Sprintf("Copy User %d", j),
+				fmt.Sprintf("copy_user_%d@example.com", j),
+			})
+		}
+
+		_, err := dbPgx.CopyFrom(
+			context.Background(),
+			pgx.Identifier{"users"},   // 表名
+			[]string{"name", "email"}, // 列名
+			pgx.CopyFromRows(rows),    // 数据源
+		)
+		if err != nil {
+			b.Fatalf("pgx copy from failed: %v", err)
 		}
 	}
 }
