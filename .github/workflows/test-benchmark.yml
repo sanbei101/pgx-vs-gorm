@@ -16,7 +16,7 @@ jobs:
     # 创建一个测试数据库
     services:
       postgresql:
-        image: 'postgresql:18'
+        image: postgres:18
         env:
           POSTGRESQL_PASSWORD: postgrespassword
           POSTGRES_DB: benchdb
@@ -31,8 +31,10 @@ jobs:
     - uses: actions/setup-go@v6
       with:
         go-version: 'stable'
-      run: go version
 
+    - name: Verify Go version
+      run: go version
+      
     - name: Install dependencies
       run: go mod tidy
 
