@@ -18,7 +18,7 @@ jobs:
       postgresql:
         image: postgres:18
         env:
-          POSTGRESQL_PASSWORD: postgrespassword
+          POSTGRES_PASSWORD: postgrespassword
           POSTGRES_DB: benchdb
         ports:
           - '5432:5432'
@@ -31,9 +31,6 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: 'stable'
-
-    - name: Verify Go version
-      run: go version
       
     - name: Install dependencies
       run: go mod tidy
