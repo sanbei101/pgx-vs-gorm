@@ -59,49 +59,47 @@ func TestMain(m *testing.M) {
 }
 
 // =================== 插入基准测试 ===================
-
-func BenchmarkGormInsert(b *testing.B) {
-	for i := 0; b.Loop(); i++ {
-		user := User{Name: fmt.Sprintf("Gorm User %d", i), Email: fmt.Sprintf("gorm_user_%d@example.com", i)}
-		if err := dbGorm.Create(&user).Error; err != nil {
-			b.Fatalf("GORM insert failed: %v", err)
+func BenchmarkInsert(b *testing.B) {
+	b.Run("gorm", func(b *testing.B) {
+		for i := 0; b.Loop(); i++ {
+			user := User{Name: fmt.Sprintf("Gorm User %d", i), Email: fmt.Sprintf("gorm_user_%d@example.com", i)}
+			if err := dbGorm.Create(&user).Error; err != nil {
+				b.Fatalf("GORM insert failed: %v", err)
+			}
 		}
-	}
-}
+	})
 
-func BenchmarkPgxInsert(b *testing.B) {
-	for i := 0; b.Loop(); i++ {
-		name := fmt.Sprintf("Pgx User %d", i)
-		email := fmt.Sprintf("pgx_user_%d@example.com", i)
-		_, err := dbPgx.Exec(context.Background(), "INSERT INTO users (name, email, created_at) VALUES ($1, $2, NOW())", name, email)
-		if err != nil {
-			b.Fatalf("pgx insert failed: %v", err)
+	b.Run("pgx", func(b *testing.B) {
+		for i := 0; b.Loop(); i++ {
+			name := fmt.Sprintf("Pgx User %d", i)
+			email := fmt.Sprintf("pgx_user_%d@example.com", i)
+			_, err := dbPgx.Exec(context.Background(), "INSERT INTO users (name, email, created_at) VALUES ($1, $2, NOW())", name, email)
+			if err != nil {
+				b.Fatalf("pgx insert failed: %v", err)
+			}
 		}
-	}
-}
+	})
 
-func BenchmarkPgxInsertCopy(b *testing.B) {
-	const totalRows = 10000
-
-	for b.Loop() {
-		rows := make([][]any, 0, totalRows)
-		for j := range totalRows {
+	b.Run("pgx-copy", func(b *testing.B) {
+		rows := make([][]any, 0, b.N)
+		for j := range b.N {
 			rows = append(rows, []any{
 				fmt.Sprintf("Copy User %d", j),
 				fmt.Sprintf("copy_user_%d@example.com", j),
 			})
 		}
-
-		_, err := dbPgx.CopyFrom(
-			context.Background(),
-			pgx.Identifier{"users"},   // 表名
-			[]string{"name", "email"}, // 列名
-			pgx.CopyFromRows(rows),    // 数据源
-		)
-		if err != nil {
-			b.Fatalf("pgx copy from failed: %v", err)
+		for i := 1; i <= b.N; i++ {
+			_, err := dbPgx.CopyFrom(
+				context.Background(),
+				pgx.Identifier{"users"},
+				[]string{"name", "email"},
+				pgx.CopyFromRows(rows),
+			)
+			if err != nil {
+				b.Fatalf("pgx copy from failed: %v", err)
+			}
 		}
-	}
+	})
 }
 
 // =================== 查询基准测试 ===================
@@ -115,40 +113,36 @@ func prepareDataForQuery(count int) {
 	}
 	dbGorm.Create(&users)
 }
-
-func BenchmarkGormQuery(b *testing.B) {
-	const totalUsers = 1000
-	prepareDataForQuery(totalUsers)
-
-	for b.Loop() {
-		randomID := rand.Intn(totalUsers) + 1
-		var user User
-		if err := dbGorm.First(&user, randomID).Error; err != nil {
-			b.Fatalf("GORM query failed: %v", err)
+func BenchmarkQuery(b *testing.B) {
+	b.Run("gorm", func(b *testing.B) {
+		const totalUsers = 1000
+		prepareDataForQuery(totalUsers)
+		for b.Loop() {
+			randomID := rand.Intn(totalUsers) + 1
+			var user User
+			if err := dbGorm.First(&user, randomID).Error; err != nil {
+				b.Fatalf("GORM query failed: %v", err)
+			}
 		}
-	}
-}
-
-func BenchmarkPgxQuery(b *testing.B) {
-	const totalUsers = 1000
-	prepareDataForQuery(totalUsers)
-
-	for b.Loop() {
-		randomID := rand.Intn(totalUsers) + 1
-		var name, email string
-		var createdAt time.Time
-		err := dbPgx.QueryRow(context.Background(), "SELECT name, email, created_at FROM users WHERE id = $1", randomID).Scan(&name, &email, &createdAt)
-		if err != nil {
-			b.Fatalf("pgx query failed: %v", err)
-		}
-	}
-}
-
-func BenchmarkQueryMulti(b *testing.B) {
-	const totalUsers = 1000
-	prepareDataForQuery(totalUsers)
+	})
 
 	b.Run("pgx", func(b *testing.B) {
+		const totalUsers = 1000
+		prepareDataForQuery(totalUsers)
+		for b.Loop() {
+			randomID := rand.Intn(totalUsers) + 1
+			var name, email string
+			var createdAt time.Time
+			err := dbPgx.QueryRow(context.Background(), "SELECT name, email, created_at FROM users WHERE id = $1", randomID).Scan(&name, &email, &createdAt)
+			if err != nil {
+				b.Fatalf("pgx query failed: %v", err)
+			}
+		}
+	})
+
+	b.Run("pgx-multi", func(b *testing.B) {
+		const totalUsers = 1000
+		prepareDataForQuery(totalUsers)
 		for b.Loop() {
 			rows, err := dbPgx.Query(b.Context(), "SELECT id, name, email, created_at FROM users")
 			if err != nil {
@@ -166,7 +160,9 @@ func BenchmarkQueryMulti(b *testing.B) {
 		}
 	})
 
-	b.Run("gorm", func(b *testing.B) {
+	b.Run("gorm-multi", func(b *testing.B) {
+		const totalUsers = 1000
+		prepareDataForQuery(totalUsers)
 		for b.Loop() {
 			var users []User
 			if err := dbGorm.Find(&users).Error; err != nil {
@@ -175,7 +171,9 @@ func BenchmarkQueryMulti(b *testing.B) {
 		}
 	})
 
-	b.Run("pgx-collect-rows", func(b *testing.B) {
+	b.Run("pgx-multi-collect-rows", func(b *testing.B) {
+		const totalUsers = 1000
+		prepareDataForQuery(totalUsers)
 		for b.Loop() {
 			rows, err := dbPgx.Query(b.Context(), "SELECT id, name, email, created_at FROM users")
 			if err != nil {
