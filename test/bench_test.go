@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -141,4 +142,51 @@ func BenchmarkPgxQuery(b *testing.B) {
 			b.Fatalf("pgx query failed: %v", err)
 		}
 	}
+}
+
+func BenchmarkQueryMulti(b *testing.B) {
+	const totalUsers = 1000
+	prepareDataForQuery(totalUsers)
+
+	b.Run("pgx", func(b *testing.B) {
+		for b.Loop() {
+			rows, err := dbPgx.Query(b.Context(), "SELECT id, name, email, created_at FROM users")
+			if err != nil {
+				b.Fatalf("pgx query failed: %v", err)
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var id int
+				var name, email string
+				var createdAt time.Time
+				if err := rows.Scan(&id, &name, &email, &createdAt); err != nil {
+					b.Fatalf("pgx scan failed: %v", err)
+				}
+			}
+		}
+	})
+
+	b.Run("gorm", func(b *testing.B) {
+		for b.Loop() {
+			var users []User
+			if err := dbGorm.Find(&users).Error; err != nil {
+				b.Fatalf("GORM query failed: %v", err)
+			}
+		}
+	})
+
+	b.Run("pgx-collect-rows", func(b *testing.B) {
+		for b.Loop() {
+			rows, err := dbPgx.Query(b.Context(), "SELECT id, name, email, created_at FROM users")
+			if err != nil {
+				b.Fatalf("pgx query failed: %v", err)
+			}
+			defer rows.Close()
+			users, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[User])
+			if err != nil {
+				b.Fatalf("pgx collect rows failed: %v", err)
+			}
+			runtime.KeepAlive(users)
+		}
+	})
 }
