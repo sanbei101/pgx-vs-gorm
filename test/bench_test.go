@@ -80,26 +80,6 @@ func BenchmarkInsert(b *testing.B) {
 		}
 	})
 
-	b.Run("pgx-copy", func(b *testing.B) {
-		rows := make([][]any, 0, b.N)
-		for j := range b.N {
-			rows = append(rows, []any{
-				fmt.Sprintf("Copy User %d", j),
-				fmt.Sprintf("copy_user_%d@example.com", j),
-			})
-		}
-		for i := 1; i <= b.N; i++ {
-			_, err := dbPgx.CopyFrom(
-				context.Background(),
-				pgx.Identifier{"users"},
-				[]string{"name", "email"},
-				pgx.CopyFromRows(rows),
-			)
-			if err != nil {
-				b.Fatalf("pgx copy from failed: %v", err)
-			}
-		}
-	})
 }
 
 // =================== 查询基准测试 ===================
