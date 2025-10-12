@@ -171,7 +171,7 @@ func BenchmarkQuery(b *testing.B) {
 		}
 	})
 
-	b.Run("pgx-multi-collect-rows", func(b *testing.B) {
+	b.Run("pgx-multi-collect-by-name", func(b *testing.B) {
 		const totalUsers = 1000
 		prepareDataForQuery(totalUsers)
 		for b.Loop() {
@@ -187,4 +187,23 @@ func BenchmarkQuery(b *testing.B) {
 			runtime.KeepAlive(users)
 		}
 	})
+
+	b.Run("pgx-multi-collect-by-pos", func(b *testing.B) {
+		const totalUsers = 1000
+		prepareDataForQuery(totalUsers)
+		for b.Loop() {
+			rows, err := dbPgx.Query(b.Context(), "SELECT id, name, email, created_at FROM users")
+			if err != nil {
+				b.Fatalf("pgx query failed: %v", err)
+			}
+			defer rows.Close()
+			users, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByPos[User])
+			if err != nil {
+
+				b.Fatalf("pgx collect rows failed: %v", err)
+			}
+			runtime.KeepAlive(users)
+		}
+	})
+
 }
